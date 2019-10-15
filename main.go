@@ -12,6 +12,7 @@ import (
 	"github.com/Zilliqa/gozilliqa-sdk/provider"
 	"github.com/Zilliqa/gozilliqa-sdk/transaction"
 	"github.com/Zilliqa/gozilliqa-sdk/util"
+	"github.com/starling-foundries/gozilliqa-example/deployer"
 )
 
 func testBlockchain() {
@@ -153,7 +154,7 @@ func testBlockchain() {
 		GasLimit:     "10000",
 		SenderPubKey: string(user.DefaultAccount.PublicKey),
 	}
-	deployTx, err := hello.Deploy(deployParams)
+	deployTx, err := deployer.DeployWith(hello, deployParams, "8254B2C9ACDF181D5D6796D63320FBB20D4EDD12")
 
 	if err != nil {
 		panic(err.Error())
