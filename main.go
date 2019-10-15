@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"strconv"
+	"strings"
 
 	"github.com/Zilliqa/gozilliqa-sdk/account"
 	"github.com/Zilliqa/gozilliqa-sdk/bech32"
@@ -12,7 +15,6 @@ import (
 	"github.com/Zilliqa/gozilliqa-sdk/provider"
 	"github.com/Zilliqa/gozilliqa-sdk/transaction"
 	"github.com/Zilliqa/gozilliqa-sdk/util"
-	"github.com/starling-foundries/gozilliqa-example/deployer"
 )
 
 func testBlockchain() {
@@ -70,16 +72,16 @@ func testBlockchain() {
 	}
 
 	// Send a transaction to the network
-	fmt.Println("Sending a payment transaction to the network...")
-	rsp := zilliqa.CreateTransaction(tx.ToTransactionPayload())
-	if rsp.Error != nil {
-		fmt.Println("Transaction response error recieved: ", rsp.Error)
-	} else {
-		result := rsp.Result.(map[string]interface{})
-		hash := result["TranID"].(string)
-		fmt.Printf("sent transaction hash is %s", hash)
-		tx.Confirm(hash, 1000, 3, zilliqa)
-	}
+	// fmt.Println("Sending a payment transaction to the network...")
+	// rsp := zilliqa.CreateTransaction(tx.ToTransactionPayload())
+	// if rsp.Error != nil {
+	// 	fmt.Println("Transaction response error recieved: ", rsp.Error)
+	// } else {
+	// 	result := rsp.Result.(map[string]interface{})
+	// 	hash := result["TranID"].(string)
+	// 	fmt.Printf("sent transaction hash is %s", hash)
+	// 	tx.Confirm(hash, 1000, 3, zilliqa)
+	// }
 
 	init := []contract.Value{
 		{
@@ -90,50 +92,10 @@ func testBlockchain() {
 		{
 			"owner",
 			"ByStr20",
-			string(user.DefaultAccount.PublicKey),
+			"8254b2c9acdf181d5d6796d63320fbb20d4edd12",
 		},
 	}
-	code := `scilla_version 0
-
-    (* HelloWorld contract *)
-
-    import ListUtils
-
-    (***************************************************)
-    (*               Associated library                *)
-    (***************************************************)
-    library HelloWorld
-
-    let not_owner_code = Int32 1
-    let set_hello_code = Int32 2
-
-    (***************************************************)
-    (*             The contract definition             *)
-    (***************************************************)
-
-    contract HelloWorld
-    (owner: ByStr20)
-
-    field welcome_msg : String = ""
-
-    transition setHello (msg : String)
-      is_owner = builtin eq owner _sender;
-      match is_owner with
-      | False =>
-        e = {_eventname : "setHello()"; code : not_owner_code};
-        event e
-      | True =>
-        welcome_msg := msg;
-        e = {_eventname : "setHello()"; code : set_hello_code};
-        event e
-      end
-    end
-
-    transition getHello ()
-        r <- welcome_msg;
-        e = {_eventname: "getHello()"; msg: r};
-        event e
-	end`
+	code, _ := ioutil.ReadFile("./HelloWorld.scilla")
 
 	fmt.Println("Attempting to deploy Hello World smart contract...")
 
@@ -154,15 +116,57 @@ func testBlockchain() {
 		GasLimit:     "10000",
 		SenderPubKey: string(user.DefaultAccount.PublicKey),
 	}
-	deployTx, err := deployer.DeployWith(hello, deployParams, "8254B2C9ACDF181D5D6796D63320FBB20D4EDD12")
+	deployTx, err := DeployWith(&hello, deployParams, "8254B2C9ACDF181D5D6796D63320FBB20D4EDD12")
 
 	if err != nil {
-		panic(err.Error())
+		fmt.Println("Contract deployment failed with error: ", err)
 	}
 
 	deployTx.Confirm(tx.ID, 1000, 10, zilliqa)
 
 	//verify that the contract is deployed
+
+}
+
+func DeployWith(c *contract.Contract, params contract.DeployParams, pubkey string) (*transaction.Transaction, error) {
+	if c.Code == "" || c.Init == nil || len(c.Init) == 0 {
+		return nil, errors.New("Cannot deploy without code or initialisation parameters.")
+	}
+
+	tx := &transaction.Transaction{
+		ID:           params.ID,
+		Version:      params.Version,
+		Nonce:        params.Nonce,
+		Amount:       "0",
+		GasPrice:     params.GasPrice,
+		GasLimit:     params.GasLimit,
+		Signature:    "",
+		Receipt:      transaction.TransactionReceipt{},
+		SenderPubKey: params.SenderPubKey,
+		ToAddr:       "0000000000000000000000000000000000000000",
+		Code:         strings.ReplaceAll(c.Code, "/\\", ""),
+		Data:         c.Init,
+		Status:       0,
+	}
+
+	err2 := c.Singer.SignWith(tx, pubkey, *c.Provider)
+	if err2 != nil {
+		return nil, err2
+	}
+
+	rsp := c.Provider.CreateTransaction(tx.ToTransactionPayload())
+
+	if rsp.Error != nil {
+		return nil, errors.New(rsp.Error.Message)
+	}
+
+	result := rsp.Result.(map[string]interface{})
+	hash := result["TranID"].(string)
+	contractAddress := result["ContractAddress"].(string)
+
+	tx.ID = hash
+	tx.ContractAddress = contractAddress
+	return tx, nil
 
 }
 
