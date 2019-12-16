@@ -92,7 +92,7 @@ func testBlockchain() {
 		{
 			"owner",
 			"ByStr20",
-			"8254b2c9acdf181d5d6796d63320fbb20d4edd12",
+			"0x8254b2c9acdf181d5d6796d63320fbb20d4edd12",
 		},
 	}
 	code, _ := ioutil.ReadFile("./HelloWorld.scilla")
@@ -122,7 +122,7 @@ func testBlockchain() {
 		fmt.Println("Contract deployment failed with error: ", err)
 	}
 
-	deployTx.Confirm(tx.ID, 1000, 10, zilliqa)
+	deployTx.Confirm(deployTx.ID, 1000, 10, zilliqa)
 
 	//verify that the contract is deployed
 
